@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# logs
+logs/
+
+# Database
+swald.db
+.env
+swald.yml
+
+# Nix
+result
+result-*

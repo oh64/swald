@@ -1,0 +1,32 @@
+[project]
+name = "swald"
+version = "0.1.0"
+description = "Bridging shouldn't need that much time"
+readme = "README.md"
+authors = [
+    { name = "Oh64", email = "root@oh64.moe" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.14.3",
+    "aiosqlite>=0.22.1",
+    "asyncio>=4.0.0",
+    "asyncpg>=0.30.0",
+    "dataclasses>=0.8",
+    "fluxer-py>=0.4.2",
+    "py-cord>=2.8.1",
+    "pyyaml>=6.0.2",
+    "stoat-py>=1.2.1",
+]
+
+[project.scripts]
+swald = "swald:run"
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.8",
+]

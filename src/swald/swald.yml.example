@@ -1,0 +1,28 @@
+command-prefix: "!bridge "
+logToFile: true
+# postgres: "postgresql://user:pass@localhost:5432/swald"
+
+connections:
+  discord-main:
+    type: discord
+    token: "discord-bot-token"
+
+  fluxer-main:
+    type: fluxer
+    token: "fluxer-token"
+
+  fluxer-alt:
+    type: fluxer
+    token: "fluxer-alt-token"
+    url: "https://fluxer-instance.example.com/v1"
+
+  spacebar-main:
+    type: spacebar
+    token: "spacebar-token"
+    api: "https://api.rory.server.spacebar.chat"
+    gateway: "https://gateway.rory.server.spacebar.chat"
+    cdn: "https://cdn.rory.server.spacebar.chat"
+
+  stoat-main:
+    type: stoat
+    token: "stoat-token"
