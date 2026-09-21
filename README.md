@@ -9,6 +9,20 @@ A small multi-protocol chat bridge. Swald connects different messaging platforms
 - **Spacebar** -> via [pycord](https://github.com/Pycord-Development/pycord/) but more patched
 - **Stoat** -> via [stoat.py](https://github.com/MCausc78/stoat.py)
 
+# How to use?
+
+You can directly use the hosted version of the bot here :
+
+[Stoat](https://go.sovrahi.com/swald-stoat)
+
+[Fluxer](https://go.sovrahi.com/swald-fluxer)
+
+[Spacebar (official instance)](https://go.sovrahi.com/swald-spacebar)
+
+[Discord](https://go.sovrahi.com/swald-discord)
+
+
+
 ## Requirements
 
 - Python ≥ 3.11
