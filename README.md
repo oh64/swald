@@ -12,6 +12,7 @@ A small multi-protocol chat bridge. Swald connects different messaging platforms
 # How to use?
 
 You can directly use the hosted version of the bot here :
+(it command prefix is `!swald `)
 
 [Stoat](https://go.sovrahi.com/swald-stoat)
 
