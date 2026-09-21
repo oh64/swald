@@ -522,7 +522,7 @@ class Bridge:
         elif cmd == "add":
             bridges = await self.database.get_matching_bridges(conn_id, room_id)
             if not bridges:
-                result = "This channel is not in any bridge. Use `{self.prefix}create` first."
+                result = f"This channel is not in any bridge. Use `{self.prefix}create` first."
             else:
                 code = event.args[0] if event.args else _generate_code()
                 expires_at = time.time() + CODE_EXPIRY_SECONDS
@@ -534,7 +534,7 @@ class Bridge:
 
         elif cmd == "join":
             if not event.args:
-                result = "Usage: `!bridge join <code>`"
+                result = f"Usage: `{self.prefix}join <code>`"
             else:
                 code = event.args[0]
                 code_data = await self.database.get_temporary_code(code)
@@ -542,7 +542,7 @@ class Bridge:
                     result = "Invalid or expired code."
                 elif time.time() > code_data["expires_at"]:
                     await self.database.remove_temporary_code(code)
-                    result = "Code expired. Request a new one with `{self.prefix}add` on the already bridged channel."
+                    result = f"Code expired. Request a new one with `{self.prefix}add` on the already bridged channel."
                 else:
                     bridge_id = code_data["bridge_id"]
                     existing = await self.database.get_matching_bridges(conn_id, room_id)

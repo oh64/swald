@@ -29,7 +29,7 @@ intents.message_content = True
 
 
 class SpacebarProtocol(CommandHandler):
-    PLATFORM_MAX_ATTACHMENT = None
+    PLATFORM_MAX_ATTACHMENT = 9 * 1024 * 1024 # TODO: this change between instances
 
     def __init__(self, token: str, connection_id: str, to_bridge: Queue,
                  command_prefix: str = "!bridge ", max_attachment_bridge: int = 100 * 1024 * 1024,
