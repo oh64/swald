@@ -45,6 +45,12 @@ class MessageReceived:
 
 
 @dataclass
+class WebhookMessageReceived:
+    connection_id: str
+    message: MessagePayload
+
+
+@dataclass
 class MessageDeleted:
     connection_id: str
     message_id: str

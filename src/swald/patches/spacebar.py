@@ -2,7 +2,41 @@ import logging
 from importlib import import_module
 from typing import Any
 
+import discord
+
 logger = logging.getLogger(__name__)
+
+
+def apply_compat_patch():
+    _orig_webhook_create = discord.Webhook._create_message
+
+    def _patched_webhook_create(self, data):
+        if data is not None:
+            if "pinned" not in data:
+                logger.debug("Spacebar compat: injecting missing 'pinned' field")
+                data["pinned"] = False
+            for field in ("components", "reactions", "sticker_items", "embeds", "attachments"):
+                if not data.get(field):
+                    logger.debug(f"Spacebar compat: injecting missing '{field}' field")
+                    data[field] = []
+        return _orig_webhook_create(self, data)
+
+    discord.Webhook._create_message = _patched_webhook_create
+
+    _orig_state_create = discord.state.ConnectionState.create_message
+
+    def _patched_state_create(self, *, channel, data):
+        if data is not None:
+            if "pinned" not in data:
+                logger.debug("Spacebar compat: injecting missing 'pinned' field in state")
+                data["pinned"] = False
+            for field in ("components", "reactions", "sticker_items", "embeds", "attachments"):
+                if not data.get(field):
+                    logger.debug(f"Spacebar compat: injecting missing '{field}' field in state")
+                    data[field] = []
+        return _orig_state_create(self, channel=channel, data=data)
+
+    discord.state.ConnectionState.create_message = _patched_state_create
 
 
 class SpacebarEndpoints:

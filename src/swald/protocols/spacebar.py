@@ -17,7 +17,9 @@ from swald.ipc import (
     MessageReferencePayload,
     TypingReceived,
     UserPayload,
+    WebhookMessageReceived,
 )
+from swald.patches.spacebar import SpacebarEndpoints, apply_compat_patch
 from swald.protocols.commands import CommandHandler
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,8 @@ class SpacebarProtocol(CommandHandler):
         self.gateway = gateway or "https://gateway.rory.server.spacebar.chat"
         self.cdn = cdn or "https://cdn.rory.server.spacebar.chat"
 
-        self._apply_endpoints(self.api, self.gateway, self.cdn)
+        SpacebarEndpoints(api=self.api, cdn=self.cdn, gateway=self.gateway).apply()
+        apply_compat_patch()
 
         self.bot = discord.Client(intents=intents)
         self._webhooks: dict[int, discord.Webhook] = {}
@@ -53,25 +56,6 @@ class SpacebarProtocol(CommandHandler):
         self.bot.event(self.on_raw_message_delete)
         self.bot.event(self.on_raw_message_edit)
         self.bot.event(self.on_typing)
-
-    def _apply_endpoints(self, api, gateway, cdn):
-        if api:
-            discord.http.Route.API_BASE_URL = f"{api}/api/v{discord.http.API_VERSION}"
-        if cdn:
-            discord.asset.Asset.BASE = cdn
-        if gateway:
-            api_version = discord.http.API_VERSION
-
-            async def _get_gateway(self, *, encoding="json", zlib=True):
-                value = "{0}?encoding={1}&v={2}" + ("&compress=zlib-stream" if zlib else "")
-                return value.format(gateway, encoding, api_version)
-
-            async def _get_bot_gateway(self, *, encoding="json", zlib=True):
-                value = "{0}?encoding={1}&v={2}" + ("&compress=zlib-stream" if zlib else "")
-                return 1, value.format(gateway, encoding, api_version)
-
-            discord.http.HTTPClient.get_gateway = _get_gateway
-            discord.http.HTTPClient.get_bot_gateway = _get_bot_gateway
 
     async def on_ready(self):
         bot_id = self.bot.user.id
@@ -171,7 +155,24 @@ class SpacebarProtocol(CommandHandler):
         await message.delete()
 
     async def on_message(self, message):
-        if message.author.bot or message.author.id in self._webhook_user_ids:
+        if message.author.bot:
+            self._sent_message_ids.add(message.id)
+            self.to_bridge.put(WebhookMessageReceived(
+                connection_id=self.connection_id,
+                message=MessagePayload(
+                    id=str(message.id),
+                    user=UserPayload(
+                        id=str(message.author.id),
+                        name=message.author.name,
+                        avatar_url=str(message.author.display_avatar.url),
+                    ),
+                    reference=None,
+                    content=self.message_parsing(message.content),
+                    attachments=[],
+                    room_id=str(message.channel.id),
+                    connection_id=self.connection_id,
+                ),
+            ))
             return
 
         if (self.is_command(message.content)
@@ -265,9 +266,11 @@ class SpacebarProtocol(CommandHandler):
         message_reference = None
         if reply_to:
             message_reference = {
-                "message_id": int(reply_to),
-                "channel_id": int(room_id),
+                "message_id": str(reply_to),
+                "channel_id": str(room_id),
             }
+            if getattr(channel, "guild", None):
+                message_reference["guild_id"] = str(channel.guild.id)
 
         send_kwargs: dict[str, Any] = {
             "wait": True,

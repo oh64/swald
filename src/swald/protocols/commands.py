@@ -89,11 +89,6 @@ class CommandHandler:
     async def _send_response(self, message, content: str):
         try:
             await message.channel.send(content)
-        except KeyError:
-            logger.warning(
-                f"[{self.connection_id}] Spacebar bug: missing 'pinned' field "
-                f"in message data, command response dropped"
-            )
         except Exception:
             logger.exception(f"[{self.connection_id}] Failed to send response")
 

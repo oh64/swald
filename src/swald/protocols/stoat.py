@@ -16,6 +16,7 @@ from swald.ipc import (
     MessageReferencePayload,
     TypingReceived,
     UserPayload,
+    WebhookMessageReceived,
 )
 from swald.protocols.commands import CommandHandler
 
@@ -163,6 +164,23 @@ class StoatProtocol(CommandHandler):
             return
 
         if message.author.bot:
+            self._sent_message_ids.add(str(message.id))
+            self.to_bridge.put(WebhookMessageReceived(
+                connection_id=self.connection_id,
+                message=MessagePayload(
+                    id=str(message.id),
+                    user=UserPayload(
+                        id=str(message.author.id),
+                        name=message.author.name,
+                        avatar_url=message.author.avatar.url() if hasattr(message.author, "avatar") and message.author.avatar else "",
+                    ),
+                    reference=None,
+                    content=self.message_parsing(message.content),
+                    attachments=[],
+                    room_id=str(message.channel_id),
+                    connection_id=self.connection_id,
+                ),
+            ))
             return
 
         if (self.is_command(message.content)

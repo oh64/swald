@@ -23,6 +23,7 @@ from swald.ipc import (
     SendMessageResult,
     SendTyping,
     TypingReceived,
+    WebhookMessageReceived,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,8 @@ class Bridge:
         self._DELETED_MAX_SIZE = 10000
         self._DELETED_TTL = 300
         self._pending_autolinks: dict[str, list[tuple[str, str, str, str, str]]] = {}
+        self._fuzzy_matches: list[dict] = []
+        self._FUZZY_TTL = 100
 
     def register_protocol_queue(
         self,
@@ -67,6 +70,8 @@ class Bridge:
             self._resolve_send(event)
         elif isinstance(event, ChannelsList):
             self._resolve_list_channels(event)
+        elif isinstance(event, WebhookMessageReceived):
+            await self._on_webhook_message(event)
         elif isinstance(event, MessageReceived):
             await self._on_message_received(event)
         elif isinstance(event, MessageDeleted):
@@ -97,6 +102,49 @@ class Bridge:
             for k in expired:
                 del self._deleted_message_ids[k]
 
+    async def _try_fuzzy_match(self, msg, connection_id: str):
+        now = time.time()
+        remaining = []
+
+        for pending in self._fuzzy_matches:
+            if now - pending["timestamp"] > self._FUZZY_TTL:
+                continue
+
+            if pending["target_connection_id"] != connection_id:
+                remaining.append(pending)
+                continue
+
+            if pending["target_room_id"] != msg.room_id:
+                remaining.append(pending)
+                continue
+
+            if pending["content"] != msg.content:
+                remaining.append(pending)
+                continue
+
+            if pending["user_name"] != msg.user.name:
+                remaining.append(pending)
+                continue
+
+            logger.info(
+                f"[bridge] Fuzzy match: {pending['internal_id']} -> "
+                f"{connection_id}:{msg.id}"
+            )
+
+            await self.database.record_bridged_message(
+                pending["source_connection_id"],
+                pending["source_message_id"],
+                pending["bridge_id"],
+                pending["target_connection_id"],
+                msg.id,
+            )
+            continue
+
+        self._fuzzy_matches = remaining
+
+    async def _on_webhook_message(self, event: WebhookMessageReceived):
+        await self._try_fuzzy_match(event.message, event.connection_id)
+
     async def _download_attachments(self, attachments: list[AttachmentPayload]):
         import aiohttp
 
@@ -118,6 +166,9 @@ class Bridge:
 
     async def _on_message_received(self, event: MessageReceived):
         msg = event.message
+
+        await self._try_fuzzy_match(msg, event.connection_id)
+
         logger.info(
             f"[{event.connection_id}] {msg.id} by "
             f"{msg.user.name} in {msg.room_id}"
@@ -199,6 +250,17 @@ class Bridge:
                     sent_message_id = None
 
                 if not sent_message_id:
+                    self._fuzzy_matches.append({
+                        "source_connection_id": event.connection_id,
+                        "source_message_id": msg.id,
+                        "bridge_id": bridge_id,
+                        "target_connection_id": target_conn_id,
+                        "target_room_id": target_room_id,
+                        "internal_id": internal_id,
+                        "content": msg.content,
+                        "user_name": msg.user.name,
+                        "timestamp": time.time(),
+                    })
                     continue
 
                 logger.info(

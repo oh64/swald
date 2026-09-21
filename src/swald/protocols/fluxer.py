@@ -17,6 +17,7 @@ from swald.ipc import (
     MessageReferencePayload,
     TypingReceived,
     UserPayload,
+    WebhookMessageReceived,
 )
 from swald.protocols.commands import CommandHandler
 
@@ -144,6 +145,23 @@ class FluxerProtocol(CommandHandler):
 
     async def on_message(self, message):
         if message.author.bot or message.author.id in self._webhook_user_ids:
+            self._sent_message_ids.add(message.id)
+            self.to_bridge.put(WebhookMessageReceived(
+                connection_id=self.connection_id,
+                message=MessagePayload(
+                    id=str(message.id),
+                    user=UserPayload(
+                        id=str(message.author.id),
+                        name=message.author.username,
+                        avatar_url=message.author.avatar_url,
+                    ),
+                    reference=None,
+                    content=self.message_parsing(message.content),
+                    attachments=[],
+                    room_id=str(message.channel.id),
+                    connection_id=self.connection_id,
+                ),
+            ))
             return
 
         if (self.is_command(message.content)
