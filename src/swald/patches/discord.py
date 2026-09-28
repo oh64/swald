@@ -33,7 +33,7 @@ async def patched_execute_webhook(
     wait: bool = False,
     message_reference: dict[str, Any] | None = None,
 ) -> Any:
-    params = {"wait": int(wait)}
+    params = {"wait": str(wait).lower()}
     if thread_id:
         params["thread_id"] = thread_id
 

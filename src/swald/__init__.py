@@ -1,6 +1,8 @@
+import argparse
 import asyncio
 import logging
 import multiprocessing
+import os
 import queue
 import threading
 from datetime import UTC, datetime
@@ -30,11 +32,11 @@ def _import_protocol(protocol_type: str):
     return getattr(module, class_name)
 
 
-async def main() -> None:
+async def main(config_path: str = "swald.yml") -> None:
     logger.info("Started")
     logger.info("Initializing swald")
 
-    config = load_config()
+    config = load_config(config_path)
 
     handlers: list[logging.Handler] = [logging.StreamHandler()]
     if config.log_to_file:
@@ -147,8 +149,17 @@ async def main() -> None:
 
 
 def run() -> None:
+    parser = argparse.ArgumentParser(description="swald - multi-protocol bridge")
+    parser.add_argument(
+        "--config",
+        default=os.environ.get("SWALD_CONFIG", "swald.yml"),
+        help="Path to the YAML configuration file (default: swald.yml). "
+        "Can also be set via the SWALD_CONFIG environment variable.",
+    )
+    args = parser.parse_args()
+
     multiprocessing.set_start_method("fork", force=True)
-    asyncio.run(main())
+    asyncio.run(main(args.config))
 
 
 if __name__ == "__main__":

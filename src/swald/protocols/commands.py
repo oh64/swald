@@ -1,6 +1,4 @@
-import asyncio
 import logging
-import os
 
 from swald.protocol_process import send_command
 
@@ -12,7 +10,7 @@ class CommandHandler:
         p = self.command_prefix
         return (
             "**Available commands:**\n"
-            f"`{p}ping` - Pong + memory info\n"
+            f"`{p}ping` - Pong?\n"
             f"`{p}create` - Create a new bridge\n"
             f"`{p}add` - Generate a temporary code (DM)\n"
             f"`{p}join <code>` - Join a bridge with a code\n"
@@ -23,22 +21,6 @@ class CommandHandler:
             f"`{p}cancel` - Cancel pending action\n"
             f"`{p}help` - Show this help"
         )
-
-    async def _cmd_ping(self) -> str:
-        pid = os.getpid()
-        try:
-            def _read_mem():
-                with open(f"/proc/{pid}/status") as f:
-                    for line in f:
-                        if line.startswith("VmRSS:"):
-                            return int(line.split()[1])
-                return None
-            mem_kb = await asyncio.to_thread(_read_mem)
-            if mem_kb:
-                return f" pong!\nMemory: {mem_kb / 1024:.1f} MiB"
-        except (OSError, ValueError):
-            pass
-        return " pong!"
 
     async def _cmd_list(self, room_id: str) -> str:
         return await send_command(
@@ -112,7 +94,11 @@ class CommandHandler:
         room_id = str(message.channel.id)
 
         if cmd == "ping":
-            await self._send_response(message, await self._cmd_ping())
+            result = await send_command(
+                self.to_bridge, "ping", self.connection_id, room_id
+            )
+            if result:
+                await self._send_response(message, result)
             return True
 
         if cmd == "help":
@@ -196,7 +182,7 @@ class CommandHandler:
         try:
             await user.send(content)
             return True
-        except Exception:  # noqa: BLE001
+        except Exception:
             return False
 
     async def _check_admin(self, message) -> bool:

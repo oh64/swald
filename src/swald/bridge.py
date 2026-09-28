@@ -18,11 +18,13 @@ from swald.ipc import (
     ListChannels,
     MessageDeleted,
     MessageEdited,
+    MessagePayload,
     MessageReceived,
     SendMessage,
     SendMessageResult,
     SendTyping,
     TypingReceived,
+    UserPayload,
     WebhookMessageReceived,
 )
 
@@ -52,6 +54,7 @@ class Bridge:
         self._pending_autolinks: dict[str, list[tuple[str, str, str, str, str]]] = {}
         self._fuzzy_matches: list[dict] = []
         self._FUZZY_TTL = 100
+        self._pending_errors: dict[str, asyncio.TimerHandle] = {}
 
     def register_protocol_queue(
         self,
@@ -130,6 +133,11 @@ class Bridge:
                 f"[bridge] Fuzzy match: {pending['internal_id']} -> "
                 f"{connection_id}:{msg.id}"
             )
+
+            error_key = f"{pending['source_connection_id']}:{pending['source_message_id']}"
+            pending_handle = self._pending_errors.pop(error_key, None)
+            if pending_handle:
+                pending_handle.cancel()
 
             await self.database.record_bridged_message(
                 pending["source_connection_id"],
@@ -261,6 +269,33 @@ class Bridge:
                         "user_name": msg.user.name,
                         "timestamp": time.time(),
                     })
+
+                    source_queue = self._from_queue(event.connection_id)
+                    error_key = f"{event.connection_id}:{msg.id}"
+                    if source_queue and error_key not in self._pending_errors:
+                        def _send_error(q, m, tc):
+                            error_msg = f"Your message wasn't delivered on {tc} because of an error"
+                            q.put(SendMessage(
+                                request_id=0,
+                                internal_id="error",
+                                room_id=m.room_id,
+                                message=MessagePayload(
+                                    id="",
+                                    user=UserPayload(id="", name="swald"),
+                                    reference=None,
+                                    content=error_msg,
+                                    attachments=[],
+                                    room_id=m.room_id,
+                                    connection_id=m.connection_id,
+                                ),
+                            ))
+
+                        loop = asyncio.get_event_loop()
+                        handle = loop.call_later(
+                            self._FUZZY_TTL,
+                            lambda q=source_queue, m=msg, tc=target_conn_id: _send_error(q, m, tc),
+                        )
+                        self._pending_errors[error_key] = handle
                     continue
 
                 logger.info(
@@ -490,7 +525,15 @@ class Bridge:
         result = ""
 
         if cmd == "ping":
-            pass
+            import resource
+            mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            mem_mib = mem / 1024
+            try:
+                await self.database.backend.fetchone("SELECT 1")
+                db_status = "OK"
+            except Exception as e:
+                db_status = f"Error: {e}"
+            result = f"Pong!\nDB: {db_status}\nMemory: {mem_mib:.1f} MiB"
 
         elif cmd == "list":
             bridges = await self.database.get_matching_bridges(conn_id, room_id)

@@ -112,30 +112,87 @@ class SQLiteBackend:
 class PostgresBackend:
     def __init__(self, dsn: str):
         self.dsn = dsn
+        self.db: Any = None
+        self._max_retries = 3
+        self._retry_delay = 1.0
 
     async def connect(self):
         import asyncpg
 
-        self.db = await asyncpg.connect(self.dsn)
-        for statement in SCHEMA.split(";"):
-            stmt = statement.strip()
-            if stmt:
-                await self.db.execute(stmt)
+        for attempt in range(self._max_retries):
+            try:
+                if self.db:
+                    try:
+                        await self.db.close()
+                    except Exception as close_err:
+                        logger.debug(f"Error closing old connection: {close_err}")
+                self.db = await asyncpg.connect(self.dsn)
+                for statement in SCHEMA.split(";"):
+                    stmt = statement.strip()
+                    if stmt:
+                        await self.db.execute(stmt)
+                logger.info("PostgreSQL connected")
+                return
+            except Exception as e:
+                logger.error(
+                    f"PostgreSQL connection failed (attempt {attempt + 1}/{self._max_retries}): {e}"
+                )
+                if attempt < self._max_retries - 1:
+                    import asyncio
+                    await asyncio.sleep(self._retry_delay * (attempt + 1))
+        raise RuntimeError("Failed to connect to PostgreSQL after all retries")
+
+    async def _reconnect(self):
+        logger.warning("Attempting PostgreSQL reconnection...")
+        await self.connect()
 
     async def close(self):
         await self.db.close()
 
     async def execute(self, sql: str, params: tuple = ()) -> Any:
-        return await self.db.execute(sql, *params)
+        for attempt in range(self._max_retries):
+            try:
+                return await self.db.execute(sql, *params)
+            except Exception as e:
+                logger.warning(f"PostgreSQL execute failed: {e}")
+                if attempt < self._max_retries - 1:
+                    await self._reconnect()
+                else:
+                    raise
 
     async def fetchone(self, sql: str, params: tuple = ()) -> tuple | None:
-        return await self.db.fetchrow(sql, *params)
+        for attempt in range(self._max_retries):
+            try:
+                return await self.db.fetchrow(sql, *params)
+            except Exception as e:
+                logger.warning(f"PostgreSQL fetchone failed: {e}")
+                if attempt < self._max_retries - 1:
+                    await self._reconnect()
+                else:
+                    raise
 
     async def fetchall(self, sql: str, params: tuple = ()) -> list[tuple]:
-        return await self.db.fetch(sql, *params)
+        for attempt in range(self._max_retries):
+            try:
+                return await self.db.fetch(sql, *params)
+            except Exception as e:
+                logger.warning(f"PostgreSQL fetchall failed: {e}")
+                if attempt < self._max_retries - 1:
+                    await self._reconnect()
+                else:
+                    raise
 
     async def execute_many(self, sql: str, params_list: list[tuple]):
-        await self.db.executemany(sql, params_list)
+        for attempt in range(self._max_retries):
+            try:
+                await self.db.executemany(sql, params_list)
+                return
+            except Exception as e:
+                logger.warning(f"PostgreSQL execute_many failed: {e}")
+                if attempt < self._max_retries - 1:
+                    await self._reconnect()
+                else:
+                    raise
 
     @asynccontextmanager
     async def transaction(self):
