@@ -250,12 +250,19 @@ class DiscordProtocol(CommandHandler):
 
         view = None
         if reply_to:
+            try:
+                ref = await channel.fetch_message(int(reply_to))
+                label = f"{ref.author.name} > {ref.content}"
+            except (discord.NotFound, discord.HTTPException):
+                logger.warning(
+                    f"Could not fetch replied message {reply_to} in {room_id}"
+                )
+                label = "Reply"
             view = discord.ui.View()
-            label = f"{message.user.name} > {message.content[:80]}"
             view.add_item(
                 discord.ui.Button(
                     style=discord.ButtonStyle.url,
-                    label=label,
+                    label=label[:80],
                     url=f"https://discord.com/channels/@me/{room_id}/{reply_to}",
                 )
             )
