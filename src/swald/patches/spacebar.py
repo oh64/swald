@@ -6,8 +6,57 @@ import discord
 
 logger = logging.getLogger(__name__)
 
+_compat_applied = False
+
+
+def _normalize_roles(roles: Any) -> Any:
+    """Spacebar sends member roles as full role objects; py-cord expects IDs."""
+    if not isinstance(roles, list):
+        return roles
+    normalized = []
+    for role in roles:
+        if isinstance(role, dict):
+            role_id = role.get("id")
+            if role_id is not None:
+                normalized.append(role_id)
+        else:
+            normalized.append(role)
+    return normalized
+
+
+def _normalize_member(member: Any) -> Any:
+    if isinstance(member, dict) and "roles" in member:
+        member["roles"] = _normalize_roles(member["roles"])
+    return member
+
+
+def _sanitize_message_data(data: Any) -> Any:
+    """Normalize member payloads so py-cord can parse them without crashing."""
+    if not isinstance(data, dict):
+        return data
+    if "member" in data:
+        logger.debug("Spacebar compat: normalizing 'member.roles' in message data")
+        _normalize_member(data["member"])
+    for mention in data.get("mentions") or []:
+        if isinstance(mention, dict) and "member" in mention:
+            logger.debug(
+                "Spacebar compat: normalizing 'member.roles' in mention data"
+            )
+            _normalize_member(mention["member"])
+    if isinstance(data.get("referenced_message"), dict):
+        _sanitize_message_data(data["referenced_message"])
+    for snapshot in data.get("message_snapshots") or []:
+        if isinstance(snapshot, dict) and isinstance(snapshot.get("message"), dict):
+            _sanitize_message_data(snapshot["message"])
+    return data
+
 
 def apply_compat_patch():
+    global _compat_applied
+    if _compat_applied:
+        return
+    _compat_applied = True
+
     _orig_webhook_create = discord.Webhook._create_message
 
     def _patched_webhook_create(self, data):
@@ -37,6 +86,20 @@ def apply_compat_patch():
         return _orig_state_create(self, channel=channel, data=data)
 
     discord.state.ConnectionState.create_message = _patched_state_create
+
+    _orig_parse_message_create = discord.state.ConnectionState.parse_message_create
+    _orig_parse_message_update = discord.state.ConnectionState.parse_message_update
+
+    def _patched_parse_message_create(self, data):
+        _sanitize_message_data(data)
+        return _orig_parse_message_create(self, data)
+
+    def _patched_parse_message_update(self, data):
+        _sanitize_message_data(data)
+        return _orig_parse_message_update(self, data)
+
+    discord.state.ConnectionState.parse_message_create = _patched_parse_message_create
+    discord.state.ConnectionState.parse_message_update = _patched_parse_message_update
 
 
 class SpacebarEndpoints:
