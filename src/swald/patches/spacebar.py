@@ -60,7 +60,7 @@ def apply_compat_patch():
     _orig_webhook_create = discord.Webhook._create_message
 
     def _patched_webhook_create(self, data):
-        if data is not None:
+        if isinstance(data, dict):
             if "pinned" not in data:
                 logger.debug("Spacebar compat: injecting missing 'pinned' field")
                 data["pinned"] = False
@@ -68,6 +68,12 @@ def apply_compat_patch():
                 if not data.get(field):
                     logger.debug(f"Spacebar compat: injecting missing '{field}' field")
                     data[field] = []
+        elif data is not None:
+            logger.warning(
+                "Spacebar compat: unexpected non-dict webhook message payload: %.200r",
+                data,
+            )
+            return None
         return _orig_webhook_create(self, data)
 
     discord.Webhook._create_message = _patched_webhook_create
@@ -75,7 +81,7 @@ def apply_compat_patch():
     _orig_state_create = discord.state.ConnectionState.create_message
 
     def _patched_state_create(self, *, channel, data):
-        if data is not None:
+        if isinstance(data, dict):
             if "pinned" not in data:
                 logger.debug("Spacebar compat: injecting missing 'pinned' field in state")
                 data["pinned"] = False

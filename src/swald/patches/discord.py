@@ -72,7 +72,7 @@ async def patched_execute_webhook(
         webhook_id=webhook_id,
         webhook_token=token,
     )
-    return await self.request(
+    data = await self.request(
         route,
         session,
         payload=payload,
@@ -82,6 +82,21 @@ async def patched_execute_webhook(
         files=files,
         params=params,
     )
+    if isinstance(data, str):
+        # Spacebar responds with e.g. "application/json; charset=utf-8", which py-cord's webhook request does not match
+        try:
+            parsed = json.loads(data)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, dict):
+            return parsed
+        logger.warning(
+            "Webhook %s returned an unparsable string response: %.200r",
+            webhook_id,
+            data,
+        )
+        return None
+    return data
 
 
 async def patched_send(
