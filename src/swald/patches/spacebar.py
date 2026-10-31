@@ -1,3 +1,4 @@
+import json
 import logging
 from importlib import import_module
 from typing import Any
@@ -51,11 +52,42 @@ def _sanitize_message_data(data: Any) -> Any:
     return data
 
 
+def _patch_parse_response():
+    """Spacebar sends 'application/json; charset=utf-8' (or similar), which
+    py-cord's parse_response does not match against its exact
+    'application/json' comparison, leaving JSON bodies as raw strings.
+    Fall back to parsing any JSON-looking text body."""
+    http_mod = import_module("discord.http")
+    _orig_parse_response = http_mod.parse_response
+
+    async def _patched_parse_response(response):
+        data = await _orig_parse_response(response)
+        if isinstance(data, str):
+            stripped = data.lstrip()
+            if stripped[:1] in ("{", "["):
+                try:
+                    parsed = json.loads(stripped)
+                except ValueError:
+                    pass
+                else:
+                    logger.debug(
+                        "Spacebar compat: parsed JSON body despite "
+                        "content-type %r",
+                        response.headers.get("content-type"),
+                    )
+                    return parsed
+        return data
+
+    http_mod.parse_response = _patched_parse_response
+
+
 def apply_compat_patch():
     global _compat_applied
     if _compat_applied:
         return
     _compat_applied = True
+
+    _patch_parse_response()
 
     _orig_webhook_create = discord.Webhook._create_message
 
